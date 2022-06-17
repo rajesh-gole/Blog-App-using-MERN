@@ -4,8 +4,14 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
+const createToken = (user) => {
+    return jwt.sign({ user }, process.env.SECRET, {
+        expiresIn: '7d',
+    });
+}
 
-module.exports.registerValidators = [
+
+module.exports.registerValidations = [
     body("name").not().isEmpty().trim().withMessage("Name is Required"),
     body("email").not().isEmpty().trim().withMessage("Email is Required"),
     body("password").isLength({min: 6}).withMessage("Password minimum six chars long"),
@@ -36,10 +42,8 @@ module.exports.register = async(req, res) => {
                 email,
                 password : hash,
             });
-            const token = jwt.sign({ user }, process.env.SECRET, {
-              expiresIn : '7d'
-            });
-            return res.status(200).json({msg: "Your account has been created", token})
+            const token = createToken(user);
+            return res.status(200).json({ msg: "Your account has been created", token });
         } catch (error) {
         return res.status(500).json({ errors: error });
     }
@@ -49,3 +53,35 @@ module.exports.register = async(req, res) => {
     }
 
 };   
+
+module.exports.loginValidations = [
+    body("email").not().isEmpty().trim().withMessage("Email is Required"),
+    body("password").not().isEmpty().withMessage("Password required"),
+];
+
+
+module.exports.login = async(req, res) => { 
+    const errors = validationResult(req);
+
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+    }
+    const { email, password } = req.body;
+    try {
+        const user = await User.findOne({ email });
+        if (user) {
+            const matched = await bcrypt.compare(password, user.password);
+            if (matched) {
+                const token = createToken(user);
+                return res.status(200).json({ msg: 'You have logged in Successfully', token });
+            } else {
+                return res.status(401).json({ errors: [{ msg: 'Password Not Correct' }] })
+            }
+        } else {
+            return res.status(404).json({ errors: [{ msg: 'Email not found' }] })
+        }
+    } catch (error) {
+        return res.status(500).json({errors: error});
+        
+    }
+};
